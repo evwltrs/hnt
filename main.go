@@ -6,6 +6,13 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"os/exec"
+	"runtime"
+
+	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type Item struct {
@@ -22,11 +29,90 @@ type SearchResult struct {
 	Hits []Item `json:"hits"`
 }
 
+type editorFinishedMsg struct{ err error }
+
+func openUrl(url string) tea.Cmd {
+	var cmd string
+	var args []string
+
+	switch runtime.GOOS {
+	case "windows":
+		cmd = "cmd"
+		args = []string{"/c", "start"}
+	case "darwin":
+		cmd = "open"
+	default: // "linux", "freebsd", "openbsd", "netbsd"
+		cmd = "xdg-open"
+	}
+	args = append(args, url)
+	c := exec.Command(cmd, args...) //nolint:gosec
+	return tea.ExecProcess(c, func(err error) tea.Msg {
+		return editorFinishedMsg{err}
+	})
+}
+
+var docStyle = lipgloss.NewStyle().Margin(1, 2)
+
+type listItem struct {
+	title, desc string
+}
+
+func (i listItem) Title() string       { return i.title }
+func (i listItem) Description() string { return i.desc }
+func (i listItem) FilterValue() string { return i.title }
+
+type model struct {
+	list list.Model
+}
+
+func (m model) Init() tea.Cmd {
+	return nil
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		if msg.String() == "ctrl+c" {
+			return m, tea.Quit
+		} else if msg.String() == "enter" {
+			i, ok := m.list.SelectedItem().(listItem)
+			if ok {
+				return m, openUrl(i.desc)
+			}
+			// return m.NewStatusMessage(statusMessageStyle(url.Desc))
+		}
+	case tea.WindowSizeMsg:
+		h, v := docStyle.GetFrameSize()
+		m.list.SetSize(msg.Width-h, msg.Height-v)
+	}
+
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
+func (m model) View() string {
+	return docStyle.Render(m.list.View())
+}
+
 func main() {
 	endpoint := "http://hn.algolia.com/api/v1/"
 	stories := getFrontPage(endpoint)
+
+	items := []list.Item{}
+
 	for _, v := range stories {
-		fmt.Println(v.Title)
+		items = append(items, listItem{title: v.Title, desc: v.Url})
+	}
+
+	m := model{list: list.New(items, list.NewDefaultDelegate(), 0, 0)}
+	m.list.Title = "hnt - Hacker News Terminal"
+
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	if _, err := p.Run(); err != nil {
+		fmt.Println("Error running program:", err)
+		os.Exit(1)
 	}
 }
 
