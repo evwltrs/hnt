@@ -8,29 +8,30 @@ import (
 	"net/http"
 )
 
-type Story struct {
-	By          string `json:"by"`
-	Title       string `json:"title"`
-	Url         string `json:"url"`
-	Kids        []int  `json:"kids"`
-	Descendants int    `json:"descendants"`
-	Id          int    `json:"id"`
-	Score       int    `json:"score"`
-	Time        int    `json:"time"`
+type Item struct {
+	Author    string `json:"author"`
+	Title     string `json:"title"`
+	Url       string `json:"url"`
+	CreatedAt string `json:"created_at"`
+	Children  []int  `json:"children"`
+	Id        int    `json:"id"`
+	Points    int    `json:"points"`
+}
+
+type SearchResult struct {
+	Hits []Item `json:"hits"`
 }
 
 func main() {
-	endpoint := "https://hacker-news.firebaseio.com/v0/"
-	topstories := getTopStories(endpoint)
-
-	for _, v := range topstories {
-		story := getStory(endpoint, v)
-		fmt.Println(story.Title)
+	endpoint := "http://hn.algolia.com/api/v1/"
+	stories := getFrontPage(endpoint)
+	for _, v := range stories {
+		fmt.Println(v.Title)
 	}
 }
 
-func getTopStories(endpoint string) []int {
-	url := endpoint + "topstories.json"
+func getFrontPage(endpoint string) []Item {
+	url := endpoint + "search?tags=front_page"
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -42,14 +43,17 @@ func getTopStories(endpoint string) []int {
 	if err != nil {
 		fmt.Println(err)
 	}
-	topstories := make([]int, 0, 500)
-	json.Unmarshal(body, &topstories)
+	var searchResult SearchResult
+	err2 := json.Unmarshal(body, &searchResult)
+	if err2 != nil {
+		fmt.Println(err2)
+	}
 
-	return topstories
+	return searchResult.Hits
 }
 
-func getStory(endpoint string, id int) Story {
-	url := endpoint + "item/" + fmt.Sprint(id) + ".json"
+func getItem(endpoint string, id int) Item {
+	url := endpoint + "items/" + fmt.Sprint(id)
 
 	resp, err := http.Get(url)
 	if err != nil {
@@ -61,7 +65,7 @@ func getStory(endpoint string, id int) Story {
 		fmt.Println(err)
 	}
 
-	var story Story
-	json.Unmarshal(body, &story)
-	return story
+	var item Item
+	json.Unmarshal(body, &item)
+	return item
 }
