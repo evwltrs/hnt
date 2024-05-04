@@ -31,7 +31,7 @@ type SearchResult struct {
 
 type editorFinishedMsg struct{ err error }
 
-func openUrl(url string) tea.Cmd {
+func openUrl(url string) {
 	var cmd string
 	var args []string
 
@@ -45,10 +45,7 @@ func openUrl(url string) tea.Cmd {
 		cmd = "xdg-open"
 	}
 	args = append(args, url)
-	c := exec.Command(cmd, args...) //nolint:gosec
-	return tea.ExecProcess(c, func(err error) tea.Msg {
-		return editorFinishedMsg{err}
-	})
+	exec.Command(cmd, args...).Start() //nolint:gosec
 }
 
 var docStyle = lipgloss.NewStyle().Margin(1, 2)
@@ -72,14 +69,14 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
+		switch msg.String() {
+		case "ctrl+c":
 			return m, tea.Quit
-		} else if msg.String() == "enter" {
+		case "enter":
 			i, ok := m.list.SelectedItem().(listItem)
-			if ok {
-				return m, openUrl(i.desc)
+			if ok && len(i.desc) > 0 {
+				openUrl(i.desc)
 			}
-			// return m.NewStatusMessage(statusMessageStyle(url.Desc))
 		}
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
